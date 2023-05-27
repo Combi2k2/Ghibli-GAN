@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+import config
 
 VGG_MEAN = [103.939, 116.779, 123.68]
 vgg_model = None
 
-class Vgg19:
+class VGGLoss(nn.Module):
     def __init__(self):
         super().__init__()
         self.vgg = torchvision.models.vgg19(weights = 'DEFAULT').features[:28].eval()
@@ -15,8 +16,7 @@ class Vgg19:
         for param in self.vgg.parameters():
             param.requires_grad = False
         
-        self.vgg_model = nn.Sequential(*layers)
-        self.vgg_model.eval()
+        print("Finish loading VGG19")
     
     def _vggTransform(self, img):
         img = (torch.flip(img, dims = [1]) + 1) * 127.5
@@ -107,19 +107,7 @@ def cal_lossG(discriminator, real_imgs, fake_imgs, gan_loss):
     pred_fake = discriminator(fake_imgs)
     loss_G_gan = gan_loss(pred_fake, True)
     
-    g_loss = -torch.mean(torch.log(fake_logit))
-    d_loss = -torch.mean(torch.log(real_logit) + torch.log(1. - fake_logit))
-    
-    return d_loss, g_loss
-
-def lsgan_loss(discriminator, real, fake):
-    disc_real = discriminator(real)
-    disc_fake = discriminator(fake.detach())
-    
-    g_loss = torch.mean((disc_fake - 1)**2)
-    d_loss = (torch.mean((disc_real - 1)**2) + torch.mean(disc_fake**2)) / 2
-    
-    return d_loss, g_loss
+    return loss_G_gan
 
 def total_variation_loss(image, k_size = 1):
     tv_H = torch.mean((image[:, :, k_size:, :] - image[:, :, :-k_size, :])**2)
@@ -142,6 +130,6 @@ if __name__ == '__main__':
 
     print(vggloss.vgg(a).shape)
     
-    # print(vggloss(a, b))
-    # print(ganloss(a, True))
-    # print(ganloss(b, False))
+    print(vggloss(a, b))
+    print(ganloss(a, True))
+    print(ganloss(b, False))

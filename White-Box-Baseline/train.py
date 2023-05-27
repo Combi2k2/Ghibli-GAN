@@ -11,61 +11,7 @@ import loss
 
 from filters import guided_filter, color_shift, simple_superpixel
 from utils import save_some_examples, save_checkpoint, load_checkpoint
-from dataset import GhibliDataset
-
-def single_iter(gen, disc_sf, disc_tx, opt_gen, opt_disc_sf, opt_disc_tx, sample, train_flag = True):
-    input_photo = sample[0].to(config.DEVICE)
-    
-    if (train_flag):
-        gen = gen.train()
-        gen.zero_grad()
-
-        disc_sf = disc_sf.train()
-        disc_tx = disc_tx.train()
-
-        for p in list(disc_sf.parameters() + disc_tx.parameters()):
-            p.requires_grad_(True)
-
-        disc_sf.zero_grad(set_to_none = True)
-        disc_tx.zero_grad(set_to_none = True)
-
-        input_cartoon = sample[1].to(config.DEVICE)
-        input_superpixel = sample[2].to(config.DEVICE)
-
-        output = gen(input_photo)
-        output = guided_filter(input_photo, output, r = 1)
-
-        blur_fake = guided_filter(output, output, r = 5, eps = 0.2)
-        blur_cartoon = guided_filter(input_cartoon, input_cartoon, r = 5, eps = 0.2)
-        
-        gray_fake, gray_cartoon = color_shift(output, input_cartoon)
-        
-        # Train discriminator
-        d_loss_gray = loss.cal_lossD(disc_tx, gray_cartoon, gray_fake, ganloss);    d_loss_gray.backward()
-        d_loss_blur = loss.cal_lossD(disc_sf, blur_cartoon, blur_fake, ganloss);    d_loss_blur.backward()
-
-        opt_disc_tx.step()
-        opt_disc_sf.step()
-
-        # Train generator
-        for p in list(disc_sf.parameters() + disc_tx.parameters()):
-            p.requires_grad_(False)
-        
-        g_loss_gray = loss.cal_lossG(disc_tx, gray_cartoon, gray_fake, ganloss)
-        g_loss_blur = loss.cal_lossG(disc_sf, blur_cartoon, blur_fake, ganloss)
-
-        loss_content = vggloss(output, input_photo)
-        loss_structure = vggloss(output, input_superpixel)
-
-        loss_variant = loss.total_variation_loss(output)
-
-        g_loss_total = config.LAMBDA_TEXTURE * g_loss_gray + \
-                    config.LAMBDA_SURFACE * g_loss_blur + \
-                    config.LAMBDA_CONTENT * (loss_content + loss_structure) + \
-                    config.LAMBDA_VARIANT * loss_variant
-
-        g_loss_total.backward()
-        opt_gen.step()
+from dataset import GhibliDataset, AnimeFaceDataset
 
 if __name__ == '__main__':
     # Initialize the models
@@ -91,7 +37,7 @@ if __name__ == '__main__':
     print("Finish initializing model")
 
     # Initialize the dataset
-    dataset = GhibliDataset('data/Real-Images', 'data/Cartoon', 1000)
+    dataset = AnimeFaceDataset()#'data/Real-Images', 'data/Cartoon', 1000)
 
     train_ds, valid_ds = train_test_split(dataset, test_size = 0.1, shuffle = True)
 
