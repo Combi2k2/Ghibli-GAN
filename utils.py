@@ -1,11 +1,17 @@
+import os
 import torch
 from torchvision.utils import save_image
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def save_some_examples(real, fake, epoch, folder):
-    save_image(fake, folder + f"/y_gen_{epoch}.png")
-    save_image(real, folder + f"/input_{epoch}.png")
+    save_path = os.path.join(folder, f'Epoch_{epoch}')
+    
+    if not os.path.exists(save_path):
+        os.system(f"mkdir {save_path}")
+    
+    save_image(fake, save_path + f"/y_gen_{epoch}.png")
+    save_image(real, save_path + f"/input_{epoch}.png")
 
 def save_checkpoint(model, optimizer, filename = "my_checkpoint.pt"):
     print("=> Saving checkpoint")

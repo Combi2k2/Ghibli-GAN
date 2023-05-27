@@ -1,58 +1,92 @@
 import os
 import torch
-import torch.nn as nn
 import torch.optim as optim
 
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 
+import config
 import model
 import loss
 
-from filters import guided_filter, color_shift
-from utils import save_some_examples, save_checkpoint, load_checkpoint, device
+from filters import guided_filter, color_shift, simple_superpixel
+from utils import save_some_examples, save_checkpoint, load_checkpoint
 from dataset import GhibliDataset
 
-print(device)
+def single_iter(gen, disc_sf, disc_tx, opt_gen, opt_disc_sf, opt_disc_tx, sample, train_flag = True):
+    input_photo = sample[0].to(config.DEVICE)
+    
+    if (train_flag):
+        gen = gen.train()
+        gen.zero_grad()
 
-LEARNING_RATE = 2e-4  # could also use two lrs, one for gen and one for disc
-BATCH_SIZE = 16
-IMAGE_SIZE = 256
-CHANNELS_IMG = 3
-NUM_EPOCHS = 100
-NUM_WORKERS = 8
+        disc_sf = disc_sf.train()
+        disc_tx = disc_tx.train()
 
-FEATURES_DISC = 32
-FEATURES_GEN = 32
+        for p in list(disc_sf.parameters() + disc_tx.parameters()):
+            p.requires_grad_(True)
 
-SAVE_MODEL = True
-LOAD_CHECKPOINT = False
-CHECKPOINT_DIR = 'checkpoints/'
+        disc_sf.zero_grad(set_to_none = True)
+        disc_tx.zero_grad(set_to_none = True)
+
+        input_cartoon = sample[1].to(config.DEVICE)
+        input_superpixel = sample[2].to(config.DEVICE)
+
+        output = gen(input_photo)
+        output = guided_filter(input_photo, output, r = 1)
+
+        blur_fake = guided_filter(output, output, r = 5, eps = 0.2)
+        blur_cartoon = guided_filter(input_cartoon, input_cartoon, r = 5, eps = 0.2)
+        
+        gray_fake, gray_cartoon = color_shift(output, input_cartoon)
+        
+        # Train discriminator
+        d_loss_gray = loss.cal_lossD(disc_tx, gray_cartoon, gray_fake, ganloss);    d_loss_gray.backward()
+        d_loss_blur = loss.cal_lossD(disc_sf, blur_cartoon, blur_fake, ganloss);    d_loss_blur.backward()
+
+        opt_disc_tx.step()
+        opt_disc_sf.step()
+
+        # Train generator
+        for p in list(disc_sf.parameters() + disc_tx.parameters()):
+            p.requires_grad_(False)
+        
+        g_loss_gray = loss.cal_lossG(disc_tx, gray_cartoon, gray_fake, ganloss)
+        g_loss_blur = loss.cal_lossG(disc_sf, blur_cartoon, blur_fake, ganloss)
+
+        loss_content = vggloss(output, input_photo)
+        loss_structure = vggloss(output, input_superpixel)
+
+        loss_variant = loss.total_variation_loss(output)
+
+        g_loss_total = config.LAMBDA_TEXTURE * g_loss_gray + \
+                    config.LAMBDA_SURFACE * g_loss_blur + \
+                    config.LAMBDA_CONTENT * (loss_content + loss_structure) + \
+                    config.LAMBDA_VARIANT * loss_variant
+
+        g_loss_total.backward()
+        opt_gen.step()
 
 if __name__ == '__main__':
     # Initialize the models
-    gen = model.Unet_Generator(channels = CHANNELS_IMG, features = FEATURES_GEN, num_blocks = 4).to(device)
-    disc_sf = model.Discriminator(channels = CHANNELS_IMG, features = FEATURES_DISC, patch = True).to(device)
-    disc_tx = model.Discriminator(channels = 1, features = FEATURES_DISC, patch = True).to(device)
+    gen = model.Unet_Generator(channels = config.CHANNELS_IMG, features = config.FEATURES_GEN, num_blocks = 4).to(config.DEVICE)
+    disc_sf = model.Discriminator(channels = config.CHANNELS_IMG, features = config.FEATURES_DISC, patch = True).to(config.DEVICE)
+    disc_tx = model.Discriminator(channels = 1, features = config.FEATURES_DISC, patch = True).to(config.DEVICE)
     
-    # g_scaler = torch.cuda.amp.GradScaler()
-    # d_scaler = torch.cuda.amp.GradScaler()
+    g_scaler = torch.cuda.amp.GradScaler()
+    d_scaler = torch.cuda.amp.GradScaler()
 
-    opt_gen = optim.Adam(gen.parameters(), lr = LEARNING_RATE, betas = (0.5, 0.99))
-    opt_disc_sf = optim.Adam(disc_sf.parameters(), lr = LEARNING_RATE, betas = (0.5, 0.99))
-    opt_disc_tx = optim.Adam(disc_tx.parameters(), lr = LEARNING_RATE, betas = (0.5, 0.99))
+    opt_gen = optim.Adam(gen.parameters(), lr = config.LEARNING_RATE, betas = config.BETAS)
+    opt_disc_sf = optim.Adam(disc_sf.parameters(), lr = config.LEARNING_RATE, betas = config.BETAS)
+    opt_disc_tx = optim.Adam(disc_tx.parameters(), lr = config.LEARNING_RATE, betas = config.BETAS)
 
-    if not os.path.exists(CHECKPOINT_DIR):
-        os.system(f'mkdir {CHECKPOINT_DIR}')
+    if not os.path.exists(config.CHECKPOINT_DIR):
+        os.system(f'mkdir {config.CHECKPOINT_DIR}')
 
-    if LOAD_CHECKPOINT == True:
-        CHECKPOINT_GEN = os.path.join(CHECKPOINT_DIR, 'Generator.pt')
-        CHECKPOINT_DISC_TX = os.path.join(CHECKPOINT_DIR, 'Discriminator_texture.pt')
-        CHECKPOINT_DISC_SF = os.path.join(CHECKPOINT_DIR, 'Discriminator_surface.pt')
-        
-        load_checkpoint(CHECKPOINT_GEN, gen, opt_gen, LEARNING_RATE)
-        load_checkpoint(CHECKPOINT_DISC_TX, disc_tx, opt_disc_tx, LEARNING_RATE)
-        load_checkpoint(CHECKPOINT_DISC_SF, disc_sf, opt_disc_sf, LEARNING_RATE)
+    if config.LOAD_CHECKPOINT == True:
+        load_checkpoint(config.CHECKPOINT_GEN, gen, opt_gen, config.LEARNING_RATE)
+        load_checkpoint(config.CHECKPOINT_DISC_TX, disc_tx, opt_disc_tx, config.LEARNING_RATE)
+        load_checkpoint(config.CHECKPOINT_DISC_SF, disc_sf, opt_disc_sf, config.LEARNING_RATE)
 
     print("Finish initializing model")
 
@@ -61,8 +95,8 @@ if __name__ == '__main__':
 
     train_ds, valid_ds = train_test_split(dataset, test_size = 0.1, shuffle = True)
 
-    train_loader = DataLoader(train_ds, batch_size = BATCH_SIZE, shuffle = True, num_workers = NUM_WORKERS)
-    valid_loader = DataLoader(valid_ds, batch_size = BATCH_SIZE, num_workers = NUM_WORKERS)
+    train_loader = DataLoader(train_ds, batch_size = config.BATCH_SIZE, shuffle = True, num_workers = config.NUM_WORKERS)
+    valid_loader = DataLoader(valid_ds, batch_size = config.BATCH_SIZE, num_workers = config.NUM_WORKERS)
 
     val_iterator = iter(valid_loader)
 
@@ -70,91 +104,96 @@ if __name__ == '__main__':
 
     # Start training
     torch.autograd.set_detect_anomaly(True)
-    for epoch in range(NUM_EPOCHS):
-        for batch_idx, (real, cartoon) in enumerate(train_loader):
-            print(batch_idx)
-            input_photo = real.to(device)
-            input_cartoon = cartoon.to(device)
+
+    vggloss = loss.VGGLoss().to(config.DEVICE)
+    ganloss = loss.GANLoss('lsgan', target_real_label=1.0, target_fake_label=0.0).to(config.DEVICE)
+    
+    for epoch in range(config.NUM_EPOCHS):
+        for batch_idx, (input_photo, input_cartoon) in enumerate(train_loader):
+            input_superpixel = torch.from_numpy(simple_superpixel(input_photo.permute(0, 2, 3, 1).numpy())).permute(0, 3, 1, 2).to(config.DEVICE)
+            input_cartoon = input_cartoon.to(config.DEVICE)
+            input_photo = input_photo.to(config.DEVICE)
             
+            # generate the output and other feature maps
+            output = gen(input_photo)
+            output = guided_filter(input_photo, output, r = 1)
+            
+            blur_fake = guided_filter(output, output, r = 5, eps = 0.2)
+            blur_cartoon = guided_filter(input_cartoon, input_cartoon, r = 5, eps = 0.2)
+            
+            gray_fake, gray_cartoon = color_shift(output, input_cartoon)
+
             # Train Discriminator
+            for p in list(disc_sf.parameters()) + list(disc_tx.parameters()):
+                p.requires_grad_(True)
+
             with torch.cuda.amp.autocast():
-                output = gen(input_photo)
-                output = guided_filter(input_photo, output, r = 1)
-                
-                blur_fake = guided_filter(output, output, r = 5, eps = 0.2)
-                blur_cartoon = guided_filter(input_cartoon, input_cartoon, r = 5, eps = 0.2)
-                
-                gray_fake, gray_cartoon = color_shift(output, input_cartoon)
-                
-                # print(gray_fake.shape, gray_cartoon.shape)
-                # print(blur_fake.shape, blur_cartoon.shape)
-                
-                d_loss_gray, _ = loss.lsgan_loss(disc_tx, gray_cartoon, gray_fake)
-                d_loss_blur, _ = loss.lsgan_loss(disc_sf, blur_cartoon, blur_fake)
-                
-                opt_disc_tx.zero_grad();    d_loss_gray.backward(retain_graph=True)
+                d_loss_gray = loss.cal_lossD(disc_tx, gray_cartoon, gray_fake, ganloss)
+                d_loss_blur = loss.cal_lossD(disc_sf, blur_cartoon, blur_fake, ganloss)
+
+                opt_disc_tx.zero_grad(set_to_none = True);  d_loss_gray.backward()
                 opt_disc_tx.step()
-                
-                opt_disc_sf.zero_grad();    d_loss_blur.backward(retain_graph=True)
+
+                opt_disc_sf.zero_grad(set_to_none = True);  d_loss_blur.backward()
                 opt_disc_sf.step()
                 
-                # disc_tx.zero_grad()
+                # disc_tx.zero_grad(set_to_none = True)
                 # d_scaler.scale(d_loss_gray).backward()
                 # d_scaler.step(opt_disc_tx)
                 # d_scaler.update()
                 
-                # disc_sf.zero_grad()
+                # disc_sf.zero_grad(set_to_none = True)
                 # d_scaler.scale(d_loss_blur).backward()
                 # d_scaler.step(opt_disc_sf)
                 # d_scaler.update()
             
-            disc_sf.eval()
-            disc_tx.eval()
+            # Train generator
+            for p in list(disc_sf.parameters()) + list(disc_tx.parameters()):
+                p.requires_grad_(False)
             
             with torch.cuda.amp.autocast():
-                output = gen(input_photo)
-                output = guided_filter(input_photo, output, r = 1)
-                
-                blur_fake = guided_filter(output, output, r = 5, eps = 0.2)
-                blur_cartoon = guided_filter(input_cartoon, input_cartoon, r = 5, eps = 0.2)
-                
-                gray_fake, gray_cartoon = color_shift(output, input_cartoon)
-                
-                _, g_loss_gray = loss.lsgan_loss(disc_tx, gray_cartoon, gray_fake)
-                _, g_loss_blur = loss.lsgan_loss(disc_sf, blur_cartoon, blur_fake)
-                
-                loss_content = loss.vggloss_4_4(input_photo, output)
-                loss_variant = loss.total_variation_loss(output, k_size= 2)
-                
-                g_loss_total = g_loss_blur + loss_content + loss_variant
-                # print(g_loss_total)
-                
-                opt_gen.zero_grad();    g_loss_total.backward(retain_graph = True)
+                g_loss_gray = loss.cal_lossG(disc_tx, gray_cartoon, gray_fake, ganloss)
+                g_loss_blur = loss.cal_lossG(disc_sf, blur_cartoon, blur_fake, ganloss)
+
+                loss_content = vggloss(output, input_photo)
+                loss_structure = vggloss(output, input_superpixel)
+
+                loss_variant = loss.total_variation_loss(output)
+
+                g_loss_total = config.LAMBDA_TEXTURE * g_loss_gray + \
+                            config.LAMBDA_SURFACE * g_loss_blur + \
+                            config.LAMBDA_CONTENT * (loss_content + loss_structure) + \
+                            config.LAMBDA_VARIANT * loss_variant
+
+                opt_gen.zero_grad(set_to_none = True); g_loss_total.backward()
                 opt_gen.step()
-                
+
                 # opt_gen.zero_grad()
                 # g_scaler.scale(g_loss_total).backward()
                 # g_scaler.step(opt_gen)
                 # g_scaler.update()
             
-            disc_sf.train()
-            disc_tx.train()
-            
             if batch_idx % 10 == 0:
-                print(f"Epoch [{epoch}/{NUM_EPOCHS}] Batch {batch_idx} / {len(train_loader)}")
-                print(f"\tLoss Disc Surface: {d_loss_blur:.4f},\tLoss Disc Texture: {d_loss_gray:.4f},\t Loss Gen: {g_loss_total:.4f}")
+                print(f"Epoch [{epoch}/{config.NUM_EPOCHS}] Batch {batch_idx} / {len(train_loader)}")
+                print(f"\tLoss Disc: (surface: {d_loss_blur:.4f}, texture: {d_loss_gray:.4f}),\t Loss Gen: (surface: {g_loss_gray:.4f}, texture: {g_loss_blur:.4f}, content: {loss_content:.4f}, structure: {loss_structure:.4f}, variant: {loss_variant:.4f}")
         
-        if (SAVE_MODEL and (epoch + 1) % 10 == 0):
-            if (not os.path.exists(CHECKPOINT_GEN)):
-                os.system('mkdir -p ' + CHECKPOINT_DIR)
+        if (config.SAVE_MODEL and (epoch + 1) % 10 == 0):
+            if (not os.path.exists(config.CHECKPOINT_DIR)):
+                os.system('mkdir -p ' + config.CHECKPOINT_DIR)
             
-            save_checkpoint(gen, opt_gen, CHECKPOINT_GEN)
-            save_checkpoint(disc_tx, opt_disc_tx, CHECKPOINT_DISC_TX)
-            save_checkpoint(disc_sf, opt_disc_sf, CHECKPOINT_DISC_SF)
+            save_checkpoint(gen, opt_gen, config.CHECKPOINT_GEN)
+            save_checkpoint(disc_tx, opt_disc_tx, config.CHECKPOINT_DISC_TX)
+            save_checkpoint(disc_sf, opt_disc_sf, config.CHECKPOINT_DISC_SF)
         
         gen.eval()
-        x, y = next(val_iterator)
-        x, y = x.to(device), y.to(device)
+        
+        try:
+            x, _ = next(val_iterator)
+        except:
+            val_iterator = iter(valid_loader)
+            x, _ = next(val_iterator)
+        
+        x = x.to(config.DEVICE)
         
         with torch.no_grad():
             y_fake = gen(x)
