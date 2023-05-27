@@ -23,7 +23,7 @@ GAN_MODE = 'lsgan'
 # checkpoints' paths
 SAVE_MODEL = True
 LOAD_CHECKPOINT = True
-CHECKPOINT_DIR = 'checkpoints_selfie2anime/'
+CHECKPOINT_DIR = 'checkpoints/checkpoints_selfie2anime/'
 
 CHECKPOINT_GEN = os.path.join(CHECKPOINT_DIR, 'Generator.pt')
 CHECKPOINT_DISC_TX = os.path.join(CHECKPOINT_DIR, 'Discriminator_texture.pt')
@@ -32,8 +32,8 @@ CHECKPOINT_DISC_SF = os.path.join(CHECKPOINT_DIR, 'Discriminator_surface.pt')
 # Loss function design
 LAMBDA_SURFACE = 0.1
 LAMBDA_TEXTURE = 1
-LAMBDA_CONTENT = 0.02
-LAMBDA_VARIANT = 0.051
+LAMBDA_CONTENT = 5
+LAMBDA_VARIANT = 10
 
 # Dataset
 LABELS = ['City', 'Human', 'Scenery', 'Room']
