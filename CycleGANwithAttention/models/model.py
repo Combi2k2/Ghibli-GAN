@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-from autoencoder import Encoder, Decoder
-from attention import SelfAttention
-from layers import adaILN, ILN
+from .autoencoder import Encoder, Decoder
+from .attention import SelfAttention
+from .layers import adaILN, ILN
 
 
 class ResnetBlock(nn.Module):
@@ -31,7 +31,7 @@ class ResnetBlock(nn.Module):
         return out + x
 
 class Generator(nn.Module):
-    def __init__(self, channels, features = 64, d_model = 528, n_downsampling = 3, n_blocks = 5):
+    def __init__(self, channels = 3, features = 64, d_model = 528, n_downsampling = 3, n_blocks = 5):
         super().__init__()
         
         self.enc = Encoder(channels, d_model, features, n_downsampling, bias = False, act = "relu")
