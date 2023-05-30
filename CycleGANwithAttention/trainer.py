@@ -43,18 +43,18 @@ class Trainer(object):
             self.load()
         
         # Define loss function
-        self.dif_loss = nn.L1Loss().to(config.DEVICE)
-        self.gan_loss = loss.GANLoss('vanilla').to(config.DEVICE)
-        self.lsgan_loss = loss.GANLoss('lsgan').to(config.DEVICE)
+        self.criterion_recon = nn.L1Loss().to(config.DEVICE)
+        self.criterion_CAM = loss.GANLoss('vanilla').to(config.DEVICE)
+        self.criterion_GAN = loss.GANLoss('lsgan').to(config.DEVICE)
     
     def build_model(self):
         self.genA2B = Generator(config.CHANNELS_IMG, config.FEATURES_GEN, config.EMBED_DIM, config.N_DOWNSAMPLING, config.N_RESTNET_BLOCK).to(config.DEVICE)
         self.genB2A = Generator(config.CHANNELS_IMG, config.FEATURES_GEN, config.EMBED_DIM, config.N_DOWNSAMPLING, config.N_RESTNET_BLOCK).to(config.DEVICE)
-        self.discA = Discriminator(config.CHANNELS_IMG, config.FEATURES_GEN, config.EMBED_DIM, config.N_DOWNSAMPLING, config.N_RESTNET_BLOCK).to(config.DEVICE)
-        self.discB = Discriminator(config.CHANNELS_IMG, config.FEATURES_GEN, config.EMBED_DIM, config.N_DOWNSAMPLING, config.N_RESTNET_BLOCK).to(config.DEVICE)
+        self.discA = Discriminator(config.CHANNELS_IMG, config.FEATURES_DISC, config.EMBED_DIM, config.N_DOWNSAMPLING).to(config.DEVICE)
+        self.discB = Discriminator(config.CHANNELS_IMG, config.FEATURES_DISC, config.EMBED_DIM, config.N_DOWNSAMPLING).to(config.DEVICE)
         
-        self.G_optim = torch.optim.Adam(itertools.chain(self.genA2B.parameters(), self.genB2A.parameters()), lr = config.LEARNING_RATE, betas = config.BETA)
-        self.D_optim = torch.optim.Adam(itertools.chain(self.discA.parameters(), self.discB.parameters()), lr = config.LEARNING_RATE, betas = config.BETA)
+        self.G_optim = torch.optim.Adam(itertools.chain(self.genA2B.parameters(), self.genB2A.parameters()), lr = config.LEARNING_RATE, betas = config.BETA, weight_decay = config.WEIGHT_DECAY)
+        self.D_optim = torch.optim.Adam(itertools.chain(self.discA.parameters(), self.discB.parameters()), lr = config.LEARNING_RATE, betas = config.BETA, weight_decay = config.WEIGHT_DECAY)
     
     def run_train(self, sample):
         gc.collect()
@@ -67,8 +67,8 @@ class Trainer(object):
         fake_B2A, _, _ = self.genB2A(real_B)
         
         # Train discriminator
-        D_loss_A = config.ADV_WEIGHT * cal_lossD(self.discA, real_A, fake_B2A, self.lsgan_loss)
-        D_loss_B = config.ADV_WEIGHT * cal_lossD(self.discB, real_B, fake_A2B, self.lsgan_loss)
+        D_loss_A = config.ADV_WEIGHT * cal_lossD(self.discA, real_A, fake_B2A, self.criterion_GAN)
+        D_loss_B = config.ADV_WEIGHT * cal_lossD(self.discB, real_B, fake_A2B, self.criterion_GAN)
         
         self.D_optim.zero_grad()
         Discriminator_loss = D_loss_A + D_loss_B
@@ -76,8 +76,6 @@ class Trainer(object):
         self.D_optim.step()
         
         # Train Generator
-        self.G_optim.zero_grad()
-
         fake_A2B, fake_A2B_cam_logit, _ = self.genA2B(real_A)
         fake_B2A, fake_B2A_cam_logit, _ = self.genB2A(real_B)
 
@@ -88,17 +86,19 @@ class Trainer(object):
         fake_B2B, fake_B2B_cam_logit, _ = self.genA2B(real_B)
         
         # Adversarial Loss
-        G_adv_loss_A = cal_lossG(self.discA, fake_B2A, self.lsgan_loss)
-        G_adv_loss_B = cal_lossG(self.discB, fake_A2B, self.lsgan_loss)
+        G_adv_loss_A = cal_lossG(self.discA, fake_B2A, self.criterion_GAN)
+        G_adv_loss_B = cal_lossG(self.discB, fake_A2B, self.criterion_GAN)
 
-        G_recon_loss_A = self.dif_loss(fake_A2B2A, real_A)
-        G_recon_loss_B = self.dif_loss(fake_B2A2B, real_B)
+        # Cycle Loss
+        G_recon_loss_A = self.criterion_recon(fake_A2B2A, real_A)
+        G_recon_loss_B = self.criterion_recon(fake_B2A2B, real_B)
 
-        G_identity_loss_A = self.dif_loss(fake_A2A, real_A)
-        G_identity_loss_B = self.dif_loss(fake_B2B, real_B)
+        # Identity Loss
+        G_identity_loss_A = self.criterion_recon(fake_A2A, real_A)
+        G_identity_loss_B = self.criterion_recon(fake_B2B, real_B)
 
-        G_cam_loss_A = self.gan_loss(fake_B2A_cam_logit, True) + self.gan_loss(fake_A2A_cam_logit, False)
-        G_cam_loss_B = self.gan_loss(fake_A2B_cam_logit, True) + self.gan_loss(fake_B2B_cam_logit, False)
+        G_cam_loss_A = self.criterion_CAM(fake_B2A_cam_logit, True) + self.criterion_CAM(fake_A2A_cam_logit, False)
+        G_cam_loss_B = self.criterion_CAM(fake_A2B_cam_logit, True) + self.criterion_CAM(fake_B2B_cam_logit, False)
 
         G_loss_A = config.ADV_WEIGHT * G_adv_loss_A + config.CYCLE_WEIGHT * G_recon_loss_A + config.IDENTITY_WEIGHT * G_identity_loss_A + config.CAM_WEIGHT * G_cam_loss_A
         G_loss_B = config.ADV_WEIGHT * G_adv_loss_B + config.CYCLE_WEIGHT * G_recon_loss_B + config.IDENTITY_WEIGHT * G_identity_loss_B + config.CAM_WEIGHT * G_cam_loss_B
@@ -110,10 +110,13 @@ class Trainer(object):
         
         return {
             'D_loss': Discriminator_loss,
-            'G_loss': Generator_loss,
-            'G_adv_loss': G_adv_loss_A + G_adv_loss_B,
-            'G_recon_loss': G_recon_loss_A + G_recon_loss_B,
-            'G_cam_loss': G_cam_loss_A + G_cam_loss_B
+            'G_loss': {
+                'total_loss': Generator_loss,
+                'adv': G_adv_loss_A + G_adv_loss_B,
+                'cam': G_cam_loss_A + G_cam_loss_B,
+                'cycle': G_recon_loss_A + G_recon_loss_B,
+                'identity': G_identity_loss_A + G_identity_loss_B
+            }
         }
     
     def run_test(self, sample, save_dir):
@@ -129,25 +132,41 @@ class Trainer(object):
         fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
         fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
         
-        A2B = np.concatenate((
-            tensor2img(real_A[0]),
-            tensor2img_with_heatmap(fake_A2A[0], fake_A2A_heatmap[0]),
-            tensor2img_with_heatmap(fake_B2A[0], fake_B2A_heatmap[0]),
-            tensor2img_with_heatmap(fake_A2B2A[0], fake_A2B2A_heatmap[0]),
-        ), 1)
+        n = real_A.shape[0]
         
-        B2A = np.concatenate((
-            tensor2img(real_B[0]),
-            tensor2img_with_heatmap(fake_B2B[0], fake_B2B_heatmap[0]),
-            tensor2img_with_heatmap(fake_A2B[0], fake_A2B_heatmap[0]),
-            tensor2img_with_heatmap(fake_B2A2B[0], fake_B2A2B_heatmap[0]),
-        ), 1)
+        batch_imageA = None
+        batch_imageB = None
+        
+        for i in range(n):
+            A2B = np.concatenate((
+                tensor2img(real_A[i]),
+                tensor2img(fake_A2B[i]),
+                tensor2img(fake_A2B2A[i]),
+                tensor2img_with_heatmap(fake_A2A[i], fake_A2A_heatmap[i]),
+                tensor2img_with_heatmap(fake_A2B[i], fake_A2B_heatmap[i]),
+                tensor2img_with_heatmap(fake_A2B2A[i], fake_A2B2A_heatmap[i]),
+            ), 1)
+        
+            B2A = np.concatenate((
+                tensor2img(real_B[i]),
+                tensor2img(fake_B2A[i]),
+                tensor2img(fake_B2A2B[i]),
+                tensor2img_with_heatmap(fake_B2B[i], fake_B2B_heatmap[i]),
+                tensor2img_with_heatmap(fake_B2A[i], fake_B2A_heatmap[i]),
+                tensor2img_with_heatmap(fake_B2A2B[i], fake_B2A2B_heatmap[i]),
+            ), 1)
+            
+            if batch_imageA:
+                batch_imageA = np.concatenate((batch_imageA, A2B), dim = 0)
+                batch_imageB = np.concatenate((batch_imageB, B2A), dim = 0)
+            else:
+                batch_imageA, batch_imageB = A2B, B2A
         
         if not os.path.exists(save_dir):
             os.system(f"mkdir {save_dir}")
         
-        cv2.imwrite(os.path.join(save_dir, 'imageA2B.png'), A2B * 255.0)
-        cv2.imwrite(os.path.join(save_dir, 'imageB2A.png'), B2A * 255.0)
+        cv2.imwrite(os.path.join(save_dir, 'imageA.png'), batch_imageA * 255.0)
+        cv2.imwrite(os.path.join(save_dir, 'imageB.png'), batch_imageB * 255.0)
     
     def load(self, dir = config.CHECKPOINT_DIR):
         load_checkpoint(self.genA2B, f'{dir}/GeneratorA2B.pt')
