@@ -157,10 +157,10 @@ class Trainer(object):
             ), 1)
             
             if batch_imageA is None:
+                batch_imageA, batch_imageB = A2B, B2A
+            else:
                 batch_imageA = np.concatenate((batch_imageA, A2B), 0)
                 batch_imageB = np.concatenate((batch_imageB, B2A), 0)
-            else:
-                batch_imageA, batch_imageB = A2B, B2A
         
         if not os.path.exists(save_dir):
             os.system(f"mkdir {save_dir}")
@@ -204,8 +204,8 @@ if __name__ == '__main__':
     
     print("Load and Save checked")
     
-    x = torch.randn(1, 3, 256, 256)
-    y = torch.randn(1, 3, 256, 256)
+    x = torch.randn(2, 3, 256, 256)
+    y = torch.randn(2, 3, 256, 256)
     
     trainer.run_train((x, y))
     trainer.run_test((x, y), 'evaluate')
