@@ -156,7 +156,7 @@ class Trainer(object):
                 tensor2img_with_heatmap(fake_B2A2B[i], fake_B2A2B_heatmap[i]),
             ), 1)
             
-            if batch_imageA:
+            if batch_imageA is None:
                 batch_imageA = np.concatenate((batch_imageA, A2B), dim = 0)
                 batch_imageB = np.concatenate((batch_imageB, B2A), dim = 0)
             else:
