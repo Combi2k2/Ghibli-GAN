@@ -17,16 +17,10 @@ def save_some_examples(real, fake, epoch, folder):
     save_image(real, save_path + "/real.png")
 
 def save_checkpoint(model_object, filename = "my_checkpoint.pt"):
-    if config.CHECKPOINT_DIR not in filename:
-        filename = os.path.join(config.CHECKPOINT_DIR, filename)
-    
     print("=> Saving checkpoint")
     torch.save(model_object.state_dict(), filename)
 
 def load_checkpoint(model_object, filename, lr = None):
-    if config.CHECKPOINT_DIR not in filename:
-        filename = os.path.join(config.CHECKPOINT_DIR, filename)
-    
     if lr:  print("=> Loading checkpoint for optimizer")
     else:   print("=> Loading checkpoint for model")
     
