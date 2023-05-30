@@ -48,10 +48,10 @@ class Trainer(object):
         self.criterion_GAN = loss.GANLoss('lsgan').to(config.DEVICE)
     
     def build_model(self):
-        self.genA2B = Generator(config.CHANNELS_IMG, config.FEATURES_GEN, config.EMBED_DIM, config.N_DOWNSAMPLING, config.N_RESTNET_BLOCK).to(config.DEVICE)
-        self.genB2A = Generator(config.CHANNELS_IMG, config.FEATURES_GEN, config.EMBED_DIM, config.N_DOWNSAMPLING, config.N_RESTNET_BLOCK).to(config.DEVICE)
-        self.discA = Discriminator(config.CHANNELS_IMG, config.FEATURES_DISC, config.EMBED_DIM, config.N_DOWNSAMPLING).to(config.DEVICE)
-        self.discB = Discriminator(config.CHANNELS_IMG, config.FEATURES_DISC, config.EMBED_DIM, config.N_DOWNSAMPLING).to(config.DEVICE)
+        self.genA2B = Generator(config.CHANNELS_IMG, config.FEATURES_GEN, config.EMBED_DIM, config.N_DOWNSAMPLE_GEN, config.N_RESTNET_BLOCK).to(config.DEVICE)
+        self.genB2A = Generator(config.CHANNELS_IMG, config.FEATURES_GEN, config.EMBED_DIM, config.N_DOWNSAMPLE_GEN, config.N_RESTNET_BLOCK).to(config.DEVICE)
+        self.discA = Discriminator(config.CHANNELS_IMG, config.FEATURES_DISC, config.N_DOWNSAMPLE_DISC).to(config.DEVICE)
+        self.discB = Discriminator(config.CHANNELS_IMG, config.FEATURES_DISC, config.N_DOWNSAMPLE_DISC).to(config.DEVICE)
         
         self.G_optim = torch.optim.Adam(itertools.chain(self.genA2B.parameters(), self.genB2A.parameters()), lr = config.LEARNING_RATE, betas = config.BETA, weight_decay = config.WEIGHT_DECAY)
         self.D_optim = torch.optim.Adam(itertools.chain(self.discA.parameters(), self.discB.parameters()), lr = config.LEARNING_RATE, betas = config.BETA, weight_decay = config.WEIGHT_DECAY)
@@ -199,8 +199,8 @@ if __name__ == '__main__':
     print(count_parameters(trainer.genA2B))
     print(count_parameters(trainer.discA))
     
-    trainer.save()
-    trainer.load()
+    trainer.save('testdir')
+    trainer.load('testdir')
     
     print("Load and Save checked")
     
