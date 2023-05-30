@@ -71,14 +71,30 @@ class Generator(nn.Module):
         return x, cam_logit, heat_map
 
 class Discriminator(nn.Module):
-    def __init__(self, channels = 3, features = 64, d_model = 528, n_downsampling = 3):
-    # def __init__(self, input_nc, ndf=64, n_layers=5):
+    def __init__(self, channels = 3, features = 64, n_downsampling = 4):
         super().__init__()
+
+        down = nn.ModuleList([
+            nn.Conv2d(channels, features, kernel_size = 4, stride = 2, padding = 1, bias = True, padding_mode = 'reflect'),
+            nn.LeakyReLU(0.2, inplace = True)
+        ])
+
+        for i in range(n_downsampling - 1):
+            in_channels = features << i
+            out_channels = in_channels * 2
+
+            down.append(nn.Conv2d(in_channels, out_channels, kernel_size = 4, stride = 2, padding = 1, bias=True, padding_mode = 'reflect'))
+            down.append(nn.LeakyReLU(0.2, inplace = True))
+
+        embed_dim = out_channels * 2
+
+        down.append(nn.Conv2d(out_channels, embed_dim, kernel_size = 4, stride = 1, padding = 1, bias = True, padding_mode = 'reflect'))
+        down.append(nn.LeakyReLU(0.2, inplace = True))
         
-        self.down = Encoder(channels, d_model, features, n_downsampling, bias = True, act = "leaky")
-        self.attn = SelfAttention(d_model, act = "leaky")
+        self.down = nn.Sequential(*down)
+        self.attn = SelfAttention(embed_dim, act = "leaky")
         
-        self.classifier = nn.Conv2d(d_model, 1, kernel_size = 4, stride = 1, padding = 1, padding_mode = 'reflect', bias = False)
+        self.classifier = nn.Conv2d(embed_dim, 1, kernel_size = 4, stride = 1, padding = 1, padding_mode = 'reflect', bias = False)
 
     def forward(self, input):
         x = self.down(input)
