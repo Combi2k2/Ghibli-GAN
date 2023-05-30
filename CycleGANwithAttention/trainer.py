@@ -157,8 +157,8 @@ class Trainer(object):
             ), 1)
             
             if batch_imageA is None:
-                batch_imageA = np.concatenate((batch_imageA, A2B), dim = 0)
-                batch_imageB = np.concatenate((batch_imageB, B2A), dim = 0)
+                batch_imageA = np.concatenate((batch_imageA, A2B), 0)
+                batch_imageB = np.concatenate((batch_imageB, B2A), 0)
             else:
                 batch_imageA, batch_imageB = A2B, B2A
         
