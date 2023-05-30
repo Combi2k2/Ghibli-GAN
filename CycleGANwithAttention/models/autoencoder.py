@@ -24,7 +24,7 @@ class Encoder(nn.Module):
             
             moduleList += [
                 nn.Conv2d(in_channels, out_channels, kernel_size = 4, stride = 2, padding = 1, bias = bias, padding_mode = 'reflect'),
-                nn.BatchNorm2d(out_channels),
+                nn.InstanceNorm2d(out_channels),
                 nn.ReLU(True) if act == "relu" else nn.LeakyReLU(0.2)
             ]
         
@@ -34,7 +34,7 @@ class Encoder(nn.Module):
         return self.model(inputs)
 
 class Decoder(nn.Module):
-    def __init__(self, output_nc, feat_dim = 528, features = 64, n_downsampling = 2, bias = True, act = "relu"):
+    def __init__(self, output_nc, feat_dim = 528, features = 64, n_downsampling = 2, bias = True, norm_layer = nn.InstanceNorm2d, act = "relu"):
         """Construct a Decoder
         Parameters:
             output_nc           -- the number of channels in output image
@@ -48,18 +48,18 @@ class Decoder(nn.Module):
         moduleList = []
         
         for i in range(n_downsampling):
-            input_chan = features << (n_downsampling - i) if i > 0 else feat_dim
-            output_chan = features << (n_downsampling - i - 1)
+            in_channels = features << (n_downsampling - i) if i > 0 else feat_dim
+            out_channels = features << (n_downsampling - i - 1)
             
             moduleList += [
-                nn.ConvTranspose2d(input_chan, output_chan, kernel_size = 3, stride = 2, padding = 1, output_padding = 1),
-                nn.BatchNorm2d(output_chan),
-                nn.ReLU(inplace = True)
+                nn.Upsample(scale_factor = 2, mode = 'nearest'),
+                nn.Conv2d(in_channels, out_channels, kernel_size = 3, padding = 1, bias = bias, padding_mode = 'reflect'),
+                norm_layer(out_channels),
+                nn.ReLU(inplace = True) if act == 'relu' else nn.LeakyReLU(0.2, True)
             ]
 
-        moduleList.append(nn.ReflectionPad2d(3))
-        moduleList.append(nn.Conv2d(features, output_nc, kernel_size = 7, padding = 0))
-        moduleList.append(nn.ReLU(inplace = True))
+        moduleList.append(nn.Conv2d(features, output_nc, kernel_size = 7, padding = 3, bias = bias, padding_mode = 'reflect'))
+        moduleList.append(nn.Tanh())
 
         self.model = nn.Sequential(*moduleList)
     
@@ -67,8 +67,9 @@ class Decoder(nn.Module):
         return self.model(x)
 
 if __name__ == '__main__':
+    from layers import ILN
     enc = Encoder(3, 128)
-    dec = Decoder(3, 128)
+    dec = Decoder(3, 128, norm_layer = ILN)
     
     inputs = torch.randn(3, 3, 256, 256)
     output = dec(enc(inputs))
