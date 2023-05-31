@@ -39,9 +39,6 @@ class Trainer(object):
     def __init__(self):
         self.build_model()
         
-        if (config.LOAD_CHECKPOINT):
-            self.load()
-        
         # Define loss function
         self.criterion_recon = nn.L1Loss().to(config.DEVICE)
         self.criterion_CAM = loss.GANLoss('vanilla').to(config.DEVICE)
@@ -119,54 +116,67 @@ class Trainer(object):
             }
         }
     
-    def run_test(self, sample, save_dir):
-        real_A = sample[0].to(config.DEVICE)
-        real_B = sample[1].to(config.DEVICE)
-        
-        fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
-        fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
-
-        fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-        fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
-
-        fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
-        fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
-        
-        n = real_A.shape[0]
-        
+    def run_test(self, sample, save_dir, n = 4, filename = None, infer_mode = None):
+        real_A, real_B = None, None
         batch_imageA = None
         batch_imageB = None
-        
-        for i in range(n):
-            A2B = np.concatenate((
-                tensor2img(real_A[i]),
-                tensor2img(fake_A2B[i]),
-                tensor2img(fake_A2B2A[i]),
-                tensor2img_with_heatmap(fake_A2A[i], fake_A2A_heatmap[i]),
-                tensor2img_with_heatmap(fake_A2B[i], fake_A2B_heatmap[i]),
-                tensor2img_with_heatmap(fake_A2B2A[i], fake_A2B2A_heatmap[i]),
-            ), 1)
-        
-            B2A = np.concatenate((
-                tensor2img(real_B[i]),
-                tensor2img(fake_B2A[i]),
-                tensor2img(fake_B2A2B[i]),
-                tensor2img_with_heatmap(fake_B2B[i], fake_B2B_heatmap[i]),
-                tensor2img_with_heatmap(fake_B2A[i], fake_B2A_heatmap[i]),
-                tensor2img_with_heatmap(fake_B2A2B[i], fake_B2A2B_heatmap[i]),
-            ), 1)
-            
-            if batch_imageA is None:
-                batch_imageA, batch_imageB = A2B, B2A
-            else:
-                batch_imageA = np.concatenate((batch_imageA, A2B), 0)
-                batch_imageB = np.concatenate((batch_imageB, B2A), 0)
+
+        if (infer_mode is None):
+            real_A = sample[0].to(config.DEVICE)
+            real_B = sample[1].to(config.DEVICE)
+        elif (infer_mode == 'A2B'):
+            real_A = sample.to(config.DEVICE)
+        elif (infer_mode == 'B2A'):
+            real_B = sample.to(config.DEVICE)
+        else:
+            raise NotImplementedError('Infer mode %s not implemented' % infer_mode)
         
         if not os.path.exists(save_dir):
             os.system(f"mkdir {save_dir}")
-        
-        cv2.imwrite(os.path.join(save_dir, 'imageA.png'), batch_imageA * 255.0)
-        cv2.imwrite(os.path.join(save_dir, 'imageB.png'), batch_imageB * 255.0)
+
+        if (real_A is not None):
+            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
+            fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
+            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
+
+            for i in range(min(n, real_A.shape[0])):
+                A2B = np.concatenate((
+                    tensor2img(real_A[i]),
+                    tensor2img(fake_A2B[i]),
+                    tensor2img(fake_A2B2A[i]),
+                    tensor2img_with_heatmap(fake_A2A[i], fake_A2A_heatmap[i]),
+                    tensor2img_with_heatmap(fake_A2B[i], fake_A2B_heatmap[i]),
+                    tensor2img_with_heatmap(fake_A2B2A[i], fake_A2B2A_heatmap[i]),
+                ), 1) * 255.0
+
+                batch_imageA = A2B if batch_imageA is None else np.concatenate((batch_imageA, A2B), 0)
+
+            if (filename is not None):
+                cv2.imwrite(os.path.join(save_dir, filename), batch_imageA)
+            else:
+                cv2.imwrite(os.path.join(save_dir, 'imageA.png'), batch_imageA)
+
+        if (real_B is not None):
+            fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
+            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
+            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
+
+            for i in range(min(n, real_B.shape[0])):
+                B2A = np.concatenate((
+                    tensor2img(real_B[i]),
+                    tensor2img(fake_B2A[i]),
+                    tensor2img(fake_B2A2B[i]),
+                    tensor2img_with_heatmap(fake_B2B[i], fake_B2B_heatmap[i]),
+                    tensor2img_with_heatmap(fake_B2A[i], fake_B2A_heatmap[i]),
+                    tensor2img_with_heatmap(fake_B2A2B[i], fake_B2A2B_heatmap[i]),
+                ), 1) * 255.0
+
+                batch_imageB = B2A if batch_imageB is None else np.concatenate((batch_imageB, B2A), 0)
+            
+            if (filename is not None):
+                cv2.imwrite(os.path.join(save_dir, filename), batch_imageA)
+            else:
+                cv2.imwrite(os.path.join(save_dir, 'imageB.png'), batch_imageA)
     
     def load(self, dir = config.CHECKPOINT_DIR):
         load_checkpoint(self.genA2B, f'{dir}/GeneratorA2B.pt')
