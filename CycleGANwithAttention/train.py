@@ -17,7 +17,7 @@ import os
 print("Initializing dataset")
 
 dataset = CartoonDataset('./../CycleGAN/dataset/photo', './../CycleGAN/dataset/cartoon')
-train_ds, test_ds = train_test_split(dataset, test_size = 0.1)
+train_ds, test_ds = train_test_split(dataset, test_size = 0.05)
 
 train_loader = DataLoader(train_ds, batch_size = config.BATCH_SIZE, shuffle = True, num_workers = config.NUM_WORKERS)
 test_loader = DataLoader(test_ds, batch_size = 4, num_workers = config.NUM_WORKERS)
@@ -35,6 +35,9 @@ def add_sn(m):
 trainer.discA.apply(add_sn)
 trainer.discB.apply(add_sn)
 
+if (config.LOAD_CHECKPOINT):
+    trainer.load(config.CHECKPOINT_DIR)
+
 print(">>  Number of generator's trainable params:", count_parameters(trainer.genA2B))
 print(">>  Number of discriminator's trainable params:", count_parameters(trainer.discA))
 
@@ -43,6 +46,9 @@ print("Training")
 test_iter = iter(test_loader)
 loss_history = []
 
+if (config.LOAD_CHECKPOINT):
+    loss_history = torch.load(os.path.join(config.CHECKPOINT_DIR, 'train_loss.pt'), map_location = config.DEVICE)
+
 logging.basicConfig(
     filename = os.path.join(config.CHECKPOINT_DIR, 'train_history.log'),
     level = logging.INFO,
@@ -50,23 +56,25 @@ logging.basicConfig(
 logging.captureWarnings(True)
 
 for i in range(1, config.NUM_EPOCHS + 1):
-    logging.info(f'Epoch [{i}/{config.NUM_EPOCHS}]: Start at {datetime.now()}')
-    
     for batch_idx, sample in enumerate(train_loader):
         loss_dict = trainer.run_train(sample)
         loss_history.append(loss_dict)
-        
-        if (batch_idx % 20 == 0):
-            loss_string = f"    Batch [{batch_idx} / {len(train_loader)}]:"
-            loss_string += f" [D_loss: {loss_dict['D_loss']:.4f}]"
+
+        step = len(loss_history)
+
+        if (step % 100 == 0 or batch_idx % 50 == 0):
+            loss_string = f" [D_loss: {loss_dict['D_loss']:.4f}]"
             loss_string += f" [G_loss: {loss_dict['G_loss']['total_loss']:.4f} - ("
             loss_string += f"adv: {loss_dict['G_loss']['adv']:.4f}, "
             loss_string += f"cam: {loss_dict['G_loss']['cam']:.4f}, "
             loss_string += f"cycle: {loss_dict['G_loss']['cycle']:.4f}, "
             loss_string += f"identity: {loss_dict['G_loss']['identity']:.4f})"
+
+            if (step % 100 == 0):
+                logging.info(f"Step [{len(loss_history)}]: " + loss_string)
             
-            logging.info(loss_string)
-            print(f'Epochs [{i}/{config.NUM_EPOCHS}]', loss_string[3:])
+            if (batch_idx % 50 == 0):
+                print(f'Epochs [{i} / {config.NUM_EPOCHS}] Batch [{batch_idx} / {len(train_loader)}]:', loss_string)
             
     try:
         test_images = next(test_iter)

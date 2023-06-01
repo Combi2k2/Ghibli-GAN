@@ -19,7 +19,7 @@ transform = transforms.Compose([
 ])
 
 if __name__ == '__main__':
-    img = Image.open('hoam.png')
+    img = Image.open('celeb_input/lisa.png')
     img = transform(img)
     img = img.unsqueeze(0).to(device)
 
@@ -29,6 +29,6 @@ if __name__ == '__main__':
     load_checkpoint(trainer.genB2A, 'checkpoints/GeneratorB2A.pt')
 
     trainer.eval()
-    trainer.run_test(img, 'celeb', filename = 'hoaminzy.png', infer_mode = 'A2B')
+    trainer.run_test(img, 'celeb', filename = 'lisa.png', infer_mode = 'A2B')
 
 

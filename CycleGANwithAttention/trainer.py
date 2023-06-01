@@ -106,13 +106,13 @@ class Trainer(object):
         self.G_optim.step()
         
         return {
-            'D_loss': Discriminator_loss,
+            'D_loss': Discriminator_loss.detach().cpu().numpy(),
             'G_loss': {
-                'total_loss': Generator_loss,
-                'adv': G_adv_loss_A + G_adv_loss_B,
-                'cam': G_cam_loss_A + G_cam_loss_B,
-                'cycle': G_recon_loss_A + G_recon_loss_B,
-                'identity': G_identity_loss_A + G_identity_loss_B
+                'total_loss': Generator_loss.cpu().detach().cpu().numpy(),
+                'adv': (G_adv_loss_A + G_adv_loss_B).detach().cpu().numpy(),
+                'cam': (G_cam_loss_A + G_cam_loss_B).detach().cpu().numpy(),
+                'cycle': (G_recon_loss_A + G_recon_loss_B).detach().cpu().numpy(),
+                'identity': (G_identity_loss_A + G_identity_loss_B).detach().cpu().numpy()
             }
         }
     
@@ -174,9 +174,9 @@ class Trainer(object):
                 batch_imageB = B2A if batch_imageB is None else np.concatenate((batch_imageB, B2A), 0)
             
             if (filename is not None):
-                cv2.imwrite(os.path.join(save_dir, filename), batch_imageA)
+                cv2.imwrite(os.path.join(save_dir, filename), batch_imageB)
             else:
-                cv2.imwrite(os.path.join(save_dir, 'imageB.png'), batch_imageA)
+                cv2.imwrite(os.path.join(save_dir, 'imageB.png'), batch_imageB)
     
     def load(self, dir = config.CHECKPOINT_DIR):
         load_checkpoint(self.genA2B, f'{dir}/GeneratorA2B.pt')
