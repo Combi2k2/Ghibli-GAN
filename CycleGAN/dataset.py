@@ -30,10 +30,10 @@ class ImageDataset(Dataset):
         self.mode = mode
         if self.mode == 'train':
             self.files_A = sorted(glob.glob('dataset/cartoon/*/*.*')[:1000])
-            self.files_B = sorted(glob.glob('dataset/photo/*.*')[:1000])
+            self.files_B = sorted(glob.glob('dataset/photo/*/*.*')[:1000])
         elif self.mode == 'test':
             self.files_A = sorted(glob.glob('dataset/cartoon/*/*.*')[1000:])
-            self.files_B = sorted(glob.glob('dataset/photo/*.*')[1000:])
+            self.files_B = sorted(glob.glob('dataset/photo/*/*.*')[1000:])
         # if self.mode == 'train':
         #     self.files_A = sorted(glob.glob(os.path.join(root+'/dataset/cartoon/*')+'/*.*')[:250])
         #     self.files_B = sorted(glob.glob(os.path.join(root+'/dataset/photo')+'/*.*')[:250])

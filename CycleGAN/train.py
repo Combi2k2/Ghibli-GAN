@@ -36,7 +36,7 @@ channels = 3
 # training
 epoch = 0 # epoch to start training from
 n_epochs = 100 # number of epochs of training
-batch_size = 1 # size of the batches
+batch_size = 8 # size of the batches
 lr = 0.0002 # adam : learning rate
 b1 = 0.5 # adam : decay of first order momentum of gradient
 b2 = 0.999 # adam : decay of first order momentum of gradient

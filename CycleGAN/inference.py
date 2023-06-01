@@ -22,7 +22,8 @@ if __name__ == '__main__':
     generator.load_state_dict(torch.load('checkpoints/Generator_B2A.pt').state_dict())
     generator.eval()
 
-    img = Image.open('dataset/photo/00094.jpg')
+    
+    img = Image.open('dataset/photo/Human/0056.jpg')
     img = transform(img)
     img = img.unsqueeze(0).to(device)
 
