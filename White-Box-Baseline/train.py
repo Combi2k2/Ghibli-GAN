@@ -11,7 +11,7 @@ import loss
 
 from filters import guided_filter, color_shift, simple_superpixel
 from utils import save_some_examples, save_checkpoint, load_checkpoint
-from dataset import GhibliDataset, AnimeFaceDataset
+from dataset import CartoonDataset
 
 if __name__ == '__main__':
     # Initialize the models
@@ -37,8 +37,7 @@ if __name__ == '__main__':
     print("Finish initializing model")
 
     # Initialize the dataset
-    dataset = AnimeFaceDataset()#'data/Real-Images', 'data/Cartoon', 1000)
-
+    dataset = CartoonDataset('./../CycleGAN/dataset/photo', './../CycleGAN/dataset/cartoon')
     train_ds, valid_ds = train_test_split(dataset, test_size = 0.1, shuffle = True)
 
     train_loader = DataLoader(train_ds, batch_size = config.BATCH_SIZE, shuffle = True, num_workers = config.NUM_WORKERS)
@@ -120,8 +119,8 @@ if __name__ == '__main__':
                 # g_scaler.update()
             
             if batch_idx % 10 == 0:
-                print(f"Epoch [{epoch}/{config.NUM_EPOCHS}] Batch {batch_idx} / {len(train_loader)}")
-                print(f"\tLoss Disc: (surface: {d_loss_blur:.4f}, texture: {d_loss_gray:.4f}),\t Loss Gen: (surface: {g_loss_gray:.4f}, texture: {g_loss_blur:.4f}, content: {loss_content:.4f}, structure: {loss_structure:.4f}, variant: {loss_variant:.4f}")
+                print(f"Epoch [{epoch}/{config.NUM_EPOCHS}] Batch [{batch_idx} / {len(train_loader)}]")
+                print(f"\tLoss Disc: (surface: {d_loss_blur:.4f}, texture: {d_loss_gray:.4f}),\t Loss Gen: (surface: {g_loss_gray:.4f}, texture: {g_loss_blur:.4f}, content: {loss_content:.4f}, structure: {loss_structure:.4f}, variant: {loss_variant:.4f})")
         
         if (config.SAVE_MODEL and (epoch + 1) % 10 == 0):
             if (not os.path.exists(config.CHECKPOINT_DIR)):

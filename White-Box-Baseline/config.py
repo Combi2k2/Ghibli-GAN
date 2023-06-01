@@ -6,8 +6,8 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"==== {DEVICE} ====")
 
 # training hyper parameters
-LEARNING_RATE = 5e-5  # could also use two lrs, one for gen and one for disc
-BETAS = (0.5, 0.99)
+LEARNING_RATE = 1e-4  # could also use two lrs, one for gen and one for disc
+BETAS = (0.5, 0.999)
 
 BATCH_SIZE = 64
 IMAGE_SIZE = 256
@@ -30,10 +30,10 @@ CHECKPOINT_DISC_TX = os.path.join(CHECKPOINT_DIR, 'Discriminator_texture.pt')
 CHECKPOINT_DISC_SF = os.path.join(CHECKPOINT_DIR, 'Discriminator_surface.pt')
 
 # Loss function design
-LAMBDA_SURFACE = 0.1
+LAMBDA_SURFACE = 1
 LAMBDA_TEXTURE = 1
-LAMBDA_CONTENT = 5
-LAMBDA_VARIANT = 10
+LAMBDA_CONTENT = 10
+LAMBDA_VARIANT = 5
 
 # Dataset
-LABELS = ['City', 'Human', 'Scenery', 'Room']
+LABELS = ['Human']
